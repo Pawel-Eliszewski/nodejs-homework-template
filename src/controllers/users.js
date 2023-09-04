@@ -1,11 +1,17 @@
 import jwt from "jsonwebtoken";
+import Jimp from "jimp";
+import gravatar from "gravatar";
+import fs from "fs/promises";
+import path from "path";
 import "dotenv/config";
 import usersService from "../services/users.js";
 import User from "../models/user.js";
+import { storeAvatars } from "../utils/manageUploadFolders.js";
 import {
   userRegisterSchema,
   userLoginSchema,
   userLogoutSchema,
+  userUpdateAvatarSchema,
   userUpdateSubSchema,
 } from "../utils/validation.js";
 
@@ -101,6 +107,10 @@ const register = async (req, res, next) => {
   try {
     const newUser = new User({ email });
     newUser.setPassword(password);
+
+    const avatarURL = gravatar.url(email, { s: "250", r: "pg", d: "mp" }, true);
+    newUser.set("avatarURL", avatarURL);
+
     await newUser.save();
     return res.json({
       status: "success",
@@ -110,6 +120,7 @@ const register = async (req, res, next) => {
           id: newUser.id,
           email: newUser.email,
           subscription: newUser.subscription,
+          avatarURL: avatarURL,
         },
         message: "Registration successful",
       },
@@ -225,6 +236,55 @@ const updateSubscription = async (req, res, next) => {
   }
 };
 
+const updateAvatar = async (req, res, next) => {
+  try {
+    const { id } = req.user;
+    const { originalname, path: tmpFile } = req.file;
+    const { error } = userUpdateAvatarSchema.validate(originalname);
+    if (error?.message) {
+      return res.status(400).send({ error: error.message });
+    }
+    try {
+      const avatar = await Jimp.read(tmpFile);
+      const files = await fs.readdir(storeAvatars);
+
+      for (const file of files) {
+        if (file.startsWith(id)) {
+          await fs.rm(path.join(storeAvatars, file));
+        }
+      }
+
+      avatar.resize(250, 250);
+      const avatarName = `${id}_${originalname}`;
+      await avatar.writeAsync(path.join(storeAvatars, avatarName));
+      await fs.rm(tmpFile);
+      const newAvatarUrl = path.join(
+        `http://localhost:${process.env.PORT}`,
+        "avatars",
+        avatarName
+      );
+
+      await usersService.update(id, {
+        avatarURL: newAvatarUrl,
+      });
+      return res.json({
+        status: "success",
+        code: 200,
+        data: {
+          avatarURL: newAvatarUrl,
+        },
+      });
+    } catch (e) {
+      await fs.rm(tmpFile);
+      console.error(e);
+      next(e);
+    }
+  } catch (e) {
+    console.error(e);
+    next(e);
+  }
+};
+
 const remove = async (req, res, next) => {
   try {
     const { id } = req.user;
@@ -252,6 +312,7 @@ const usersController = {
   logout,
   update,
   updateSubscription,
+  updateAvatar,
   remove,
 };
 

@@ -1,6 +1,7 @@
 import express from "express";
 import morgan from "morgan";
 import cors from "cors";
+import path from "path";
 import "dotenv/config";
 import usersRoutes from "./routes/api/users.js";
 import contactRoutes from "./routes/api/contacts.js";
@@ -13,6 +14,7 @@ app.use(morgan(formatsLogger));
 app.use(cors());
 
 app.use(express.json());
+app.use(express.static(path.join(process.cwd(), "public")));
 
 app.use("/api/users", usersRoutes);
 app.use("/api/contacts", contactRoutes);

@@ -30,6 +30,11 @@ export const userLogoutSchema = Joi.object({}).unknown(false).messages({
   "object.unknown": "Body must be empty",
 });
 
+export const userUpdateAvatarSchema = Joi.string().trim().messages({
+  "string.base": "Avatar name must be a string",
+  "any.required": "Missing avatar name",
+});
+
 export const userUpdateSubSchema = Joi.object().keys({
   subscription: Joi.string()
     .valid("starter", "pro", "business")
