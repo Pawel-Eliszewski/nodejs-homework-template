@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import Jimp from "jimp";
+import { nanoid } from "nanoid";
 import gravatar from "gravatar";
 import fs from "fs/promises";
 import path from "path";
@@ -9,11 +10,13 @@ import User from "../models/user.js";
 import { storeAvatars } from "../utils/manageUploadFolders.js";
 import {
   userRegisterSchema,
+  userReverifySchema,
   userLoginSchema,
   userLogoutSchema,
   userUpdateAvatarSchema,
   userUpdateSubSchema,
 } from "../utils/validation.js";
+import sendEmail from "../utils/sendEmail.js";
 
 const secret = process.env.SECRET_KEY;
 
@@ -108,6 +111,11 @@ const register = async (req, res, next) => {
     const newUser = new User({ email });
     newUser.setPassword(password);
 
+    const verificationToken = nanoid();
+    newUser.set("verificationToken", verificationToken);
+
+    sendEmail(email, verificationToken);
+
     const avatarURL = gravatar.url(email, { s: "250", r: "pg", d: "mp" }, true);
     newUser.set("avatarURL", avatarURL);
 
@@ -121,9 +129,73 @@ const register = async (req, res, next) => {
           email: newUser.email,
           subscription: newUser.subscription,
           avatarURL: avatarURL,
+          verificationToken: verificationToken,
         },
         message: "Registration successful",
       },
+    });
+  } catch (e) {
+    console.error(e);
+    next(e);
+  }
+};
+
+const verify = async (req, res, next) => {
+  const { verificationToken } = req.params;
+  const user = await User.findOne({ verificationToken });
+
+  if (!user) {
+    return res.status(404).json({
+      status: "Bad request",
+      code: 404,
+      message: "Not found",
+    });
+  }
+  try {
+    await usersService.update(user.id, {
+      verify: true,
+      verificationToken: null,
+    });
+    return res.json({
+      status: "success",
+      code: 200,
+      message: "Verification successful",
+    });
+  } catch (e) {
+    console.error(e);
+    next(e);
+  }
+};
+
+const reverify = async (req, res, next) => {
+  const { email } = req.body;
+  const { error } = userReverifySchema.validate(req.body);
+  if (error?.message) {
+    return res.status(400).send({ error: error.message });
+  }
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(404).json({
+      status: "Bad request",
+      code: 404,
+      message: "Not found",
+    });
+  }
+  if (user.verify) {
+    return res.status(400).json({
+      status: "Bad request",
+      code: 400,
+      message: "Verification has already been passed",
+    });
+  }
+  try {
+    const verificationToken = nanoid();
+    user.set("verificationToken", verificationToken);
+    sendEmail(email, verificationToken);
+    return res.json({
+      status: "Success",
+      code: 200,
+      message: "Verification email sent",
     });
   } catch (e) {
     console.error(e);
@@ -139,12 +211,11 @@ const login = async (req, res, next) => {
   }
   const user = await User.findOne({ email });
 
-  if (!user || !user.validPassword(password)) {
+  if (!user || !user.validPassword(password) || !user.verify) {
     return res.status(401).json({
       status: "Unauthorized",
       code: 401,
-      message: "Email or password is wrong",
-      data: "Bad request",
+      message: "Email or password is wrong or user is not verified",
     });
   }
 
@@ -158,7 +229,7 @@ const login = async (req, res, next) => {
     const token = jwt.sign(payload, secret, { expiresIn: "1h" });
     await usersService.update(user.id, { token: token });
     return res.json({
-      status: "success",
+      status: "Success",
       code: 200,
       data: {
         token,
@@ -200,7 +271,7 @@ const update = async (req, res, next) => {
     const { body } = req;
     const results = await usersService.update(id, body);
     return res.json({
-      status: "success",
+      status: "Success",
       code: 200,
       data: {
         user: results,
@@ -224,7 +295,7 @@ const updateSubscription = async (req, res, next) => {
       subscription: subscription,
     });
     return res.json({
-      status: "success",
+      status: "Success",
       code: 200,
       data: {
         user: results,
@@ -268,7 +339,7 @@ const updateAvatar = async (req, res, next) => {
         avatarURL: newAvatarUrl,
       });
       return res.json({
-        status: "success",
+        status: "Success",
         code: 200,
         data: {
           avatarURL: newAvatarUrl,
@@ -290,7 +361,7 @@ const remove = async (req, res, next) => {
     const { id } = req.user;
     await usersService.remove(id);
     return res.json({
-      status: "success",
+      status: "Success",
       code: 200,
       data: {
         user: id,
@@ -308,6 +379,8 @@ const usersController = {
   getById,
   getCurrent,
   register,
+  verify,
+  reverify,
   login,
   logout,
   update,

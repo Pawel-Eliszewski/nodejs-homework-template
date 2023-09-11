@@ -10,7 +10,6 @@ const getOne = async (userId) => {
 
 const update = async (userId, data) => {
   return User.findOneAndUpdate({ _id: userId }, data, {
-    runValidators: true,
     new: true,
   });
 };
