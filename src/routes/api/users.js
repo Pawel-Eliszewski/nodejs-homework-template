@@ -10,6 +10,8 @@ router.get("/", auth, pagination(), usersController.getAll);
 
 router.get("/current", auth, usersController.getCurrent);
 
+router.get("/verify/:verificationToken", usersController.verify);
+
 router.get("/:id", auth, usersController.getById);
 
 router.post("/signup", usersController.register);
@@ -17,6 +19,8 @@ router.post("/signup", usersController.register);
 router.post("/login", usersController.login);
 
 router.post("/logout", auth, usersController.logout);
+
+router.post("/verify", usersController.reverify);
 
 router.patch("/", auth, usersController.update);
 

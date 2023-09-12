@@ -26,6 +26,14 @@ export const userLoginSchema = Joi.object().keys({
   }),
 });
 
+export const userReverifySchema = Joi.object().keys({
+  email: Joi.string().email().trim().required().messages({
+    "string.base": "E-mail must be a string",
+    "string.email": "Enter a valid e-mail address",
+    "any.required": "E-mail is required",
+  }),
+});
+
 export const userLogoutSchema = Joi.object({}).unknown(false).messages({
   "object.unknown": "Body must be empty",
 });
